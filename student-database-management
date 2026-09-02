@@ -1,0 +1,118 @@
+import json
+import os
+
+students = {
+    "Rajesh": {
+        "Class": 9,
+        "Marks": {
+            "Maths": 78,
+            "Science": 85,
+            "English": 82
+        }
+    },
+    "Aman": {
+        "Class": 9,
+        "Marks": {
+            "Maths": 91,
+            "Science": 76,
+            "English": 88
+        }
+    },
+    "Priya": {
+        "Class": 9,
+        "Marks": {
+            "Maths": 84,
+            "Science": 93,
+            "English": 79
+        }
+    }
+}
+
+def print_data(data):
+    for key , value in data.items():
+        if isinstance (value, dict):
+            print(f"\n--- {key} ---")
+            print_data(value)
+        else:
+            print(f"{key} -> {value}")
+            
+def update_file(data):
+    for i in data:
+        total = 0
+        for subject , num in data[i]["Marks"].items():
+            total += num
+        percent = total / 3 
+        data[i]["Total"] = total
+        data[i]["Percentage"] = percent
+            
+    with open ("students_data.json", "w") as f:
+        json.dump(data, f , indent = 4)
+    
+if not os.path.exists("students_data.json"):
+    update_file(students)
+        
+with open ("students_data.json", "r") as f:
+    data = json.load(f)
+
+def int_input(message):
+    while True:
+        try:
+            return int(input(message))
+        except ValueError:
+            print("Invalid Number")
+
+def marks_update():
+    marks1 = int_input("Enter your Maths Number: ")
+    marks2 = int_input("Enter your Science Number:  ")      
+    marks3 = int_input("Enter your English Number: ")   
+    return {"Maths": marks1 , "Science": marks2, "English" : marks3}
+                        
+def add_student(name , grade):
+    marks = marks_update()
+    data[name] = {"Class": grade , "Marks": marks}
+    update_file(data)
+    
+while True:
+    choice = int_input("\nEnter \n 1 To view all students \n 2 search student \n 3 update marks\n 4 Add new student \n 5 Delete Student \n 6 Exit : ")
+    
+    if choice == 1:
+        print_data(data)
+            
+    elif choice == 2:
+        name = input("Enter student name : ").capitalize()
+        if name in data:
+            print_data(data[name])      
+        else:
+            print("Student not found")
+        
+    elif choice in (3,4,5):
+        name = input("Enter name : ").capitalize()
+        
+        if choice == 3:
+            if name in data:
+                marks = marks_update()
+                data[name]["Marks"] = marks
+                update_file(data)
+                print("Marks updated successfully!")
+            else:
+                print("No student found")
+        
+        elif choice == 4:
+            grade = int_input("Enter your class :")
+            add_student(name , grade)
+            print("Student added successfully!")
+        
+        elif choice == 5:
+            if name in data:
+                print_data(data[name])
+                conform = int_input("\nEnter 1 to delete or 2 for not delete : ")
+                if conform == 1:
+                    del data[name]
+                    print("Data deleted")
+                    update_file(data)
+                else:
+                    print("Data did not delete")
+            else :
+                print("No student found")
+    else :
+        break    
