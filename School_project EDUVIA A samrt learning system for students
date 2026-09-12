@@ -1,0 +1,1223 @@
+from datetime import datetime, date
+import json
+import os
+import time
+import requests
+import asyncio
+from bs4 import BeautifulSoup
+from urllib.parse import quote
+from spellchecker import SpellChecker
+
+def int_input(message):
+	while True:
+		try:
+			return int(input(message))
+		except ValueError:
+			print("\n❌ Enter a valid number.\n")
+
+
+def save_data(data):
+	# Whole data to save
+	with open("student_task.json", "w") as f:
+		json.dump(data, f, indent=4)
+
+
+def load_data():
+	if os.path.exists("student_task.json"):
+		with open("student_task.json", "r") as f:
+			return json.load(f)
+	return []
+
+
+def calc_smart_score(days_left, difficulty):
+	difficulty_scores = {
+		"easy": 30,
+		"medium": 60,
+		"hard": 100
+	}
+
+	# Calculate urgency
+	urgency = max(20, 100 - ((days_left // 2) * 10))
+
+	while True:
+		try:
+			difficulty_score = difficulty_scores[difficulty]
+			break
+
+		except KeyError:
+
+			if difficulty.startswith("e"):
+				difficulty = "easy"
+
+			elif difficulty.startswith("m"):
+				difficulty = "medium"
+
+			elif difficulty.startswith("h"):
+				difficulty = "hard"
+
+			else:
+				difficulty = input(
+					"\n❌ Enter difficulty (Easy, Medium, Hard): "
+				).lower()
+
+	return (urgency + difficulty_score) / 2
+
+
+def update_data(subject, topic, exam_date, difficulty):
+
+	data = load_data()
+	task_id = len(data) + 1
+
+	task = {
+		"id": task_id,
+		"subject": subject,
+		"topic": topic,
+		"exam_date": exam_date,
+		"difficulty": difficulty,
+		"completed": False,
+		"created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+	}
+
+	data.append(task)
+
+	with open("student_task.json", "w") as f:
+		json.dump(data, f, indent=4)
+
+	return task_id
+
+
+def taking_inputs():
+
+	print("\n" + "=" * 35)
+	print("		➕ ADD STUDY TASK")
+	print("=" * 35)
+
+	subject = input("📚 Enter subject : ")
+	topic = input("📝 Enter topic : ")
+	difficulty = input(
+		"💪 Enter difficulty (Easy, Medium, Hard) : "
+	).lower()
+
+	test_date = str(calculate_date())
+
+	task_id = update_data(
+		subject,
+		topic,
+		test_date,
+		difficulty
+	)
+
+	print(f"\n✅ Task added successfully!")
+	print(f"🆔 Task ID : {task_id}")
+	print("=" * 35 + "\n")
+
+
+def calculate_date(test_date=None):
+
+	today = date.today()
+
+	if not test_date:
+
+		test_date = input(
+			"📅 Enter date (YYYY-MM-DD) of test/Exam : "
+		)
+
+		while True:
+			try:
+				target_date = datetime.strptime(
+					test_date,
+					"%Y-%m-%d"
+				).date()
+
+				if (target_date - today).days < 0:
+					print("\n❌ Existing date isn't allowed.\n")
+
+					test_date = input(
+						"📅 Enter a future date (YYYY-MM-DD) : "
+					)
+
+				else:
+					return target_date
+
+			except ValueError:
+				print("\n❌ Wrong format!")
+
+				test_date = input(
+					"📅 Enter date in YYYY-MM-DD format "
+					"(like: 2026-12-31): "
+				)
+
+	target_date = datetime.strptime(
+		test_date,
+		"%Y-%m-%d"
+	).date()
+
+	difference = target_date - today
+	days_left = difference.days
+
+	if days_left > 0:
+		return days_left
+
+	elif days_left == 0:
+		return 0
+
+	else:
+		return -1
+
+
+def view_all_tasks():
+
+	data = load_data()
+
+	print("\n" + "=" * 35)
+	print("		  📋 ALL STUDY TASKS")
+	print("=" * 35)
+
+	if data:
+
+		for i in data:
+			try :
+				print(f"\n🆔 Task ID	 : {i['id']}")
+				print(f"📚 Subject	 : {i['subject']}")
+				print(f"📝 Topic	   : {i['topic']}")
+				print(f"📅 Exam Date   : {i['exam_date']}")
+				print(f"💪 Difficulty  : {i['difficulty']}")
+				print(
+					f"✅ Completed   : "
+					f"{'Yes' if i['completed'] else 'No'}"
+				)
+				print(f"🕒 Created At  : {i['created_at']}")
+				print(f" session time : {i['time']} min")
+				print("-" * 35)
+				
+			except KeyError:
+				print(
+					"\n❌ Study time not found for this task."
+					"\n👉 First create Today's Smart Plan."
+				)
+
+	else:
+		print("\n📭 No task found.")
+
+	print()
+
+
+def mark_completed():
+
+	print("\n" + "=" * 35)
+	print("	   ✅ MARK TASK COMPLETED")
+	print("=" * 35)
+
+	task_id = int_input(
+		"🆔 Enter task ID that is completed : "
+	)
+
+	data = load_data()
+
+	if not data:
+		print("\n📭 No task found.\n")
+		return
+
+	for i in data:
+
+		if i["id"] == task_id:
+			if not i.get("time"):
+				return("First create today's task by going to Smart study planner")
+				
+			if i.get('actual_study_time' ,0) >= i.get("time"):
+			
+				i["completed"] = True
+				save_data(data)
+	
+				print("\n✅ Task completed successfully!")
+				print()
+				return
+				
+			else:
+				print("You study less time than the target. ❌ So it does not mark completed  ")
+				return
+	
+	print("\n❌ Task ID did not match.\n")
+
+
+def smart_study():
+
+	data = load_data()
+
+	if not data:
+		print("\n📭 No task found.\n")
+		return
+
+	print("\n" + "=" * 35)
+	print("	   🧠 TODAY'S SMART PLAN")
+	print("=" * 35)
+
+	total_study_time = int_input(
+		"⏱️ Enter estimated study time for today (minutes) : "
+	)
+
+	while total_study_time < 30:
+
+		print("\n⚠️ Study time should be at least 30 minutes.")
+
+		total_study_time = int_input(
+			"⏱️ Enter today's study time (minimum 30 minutes) : "
+		)
+
+	not_compl = []
+	valid_task = []
+
+	for i in data:
+
+		if not i["completed"]:
+			not_compl.append(i)
+
+	if not not_compl:
+		print("\n🎉 All given tasks are completed!\n")
+		return
+
+	total_score = 0
+
+	for i in not_compl:
+		days_left = calculate_date(i["exam_date"])
+
+		if days_left < 0:
+			print(
+				f"\n⚠️ Date already passed for "
+				f"{i['subject']} -> {i['topic']}"
+			)
+
+		else:
+			smart_score = calc_smart_score (days_left, i["difficulty"])
+			
+			i["smart_score"] = smart_score
+			total_score += smart_score
+			valid_task.append(i)
+
+	not_compl = valid_task
+	valid_task = []
+	left_time = 0
+	extra_time = 0
+
+	for i in not_compl:
+		smart_score = i["smart_score"]
+
+		time =(smart_score / total_score)* total_study_time
+		left_time += time - int(time)
+		time = int(time)
+
+		if time < 10:
+			extra_time += time
+
+		else:
+			i["time"] = time
+			index = data.index(i)
+			data[index]["time"] = time
+			
+			valid_task.append(i)
+
+	not_compl = valid_task
+
+	try:
+
+		single_extra_time = int(
+			extra_time / len(not_compl)
+		)
+		
+	except ZeroDivisionError:
+
+		print(
+			"\n📭 No upcoming tasks available. "
+			"All pending tasks have passed their exam date.\n"
+		)
+		return
+		
+	for i in not_compl:
+		
+		i["time"] += single_extra_time
+		index = data.index(i)
+		data[index]["time"] += single_extra_time
+		data[index]["plan_date"] = str(date.today())
+
+	print("\n" + "-" * 45)
+	print("		  🧠 TODAY'S SMART WORK")
+	print("-" * 45)
+
+	for index, i in enumerate(not_compl, start=1):
+
+		if index == 1:
+			i["time"] += left_time
+			index = data.index(i)
+			data[index]["time"] += left_time
+
+		print(
+			f"\n{index}. 📚 {i['subject']} → {i['topic']}"
+		)
+
+		print(f"   ⏱️ Time	   : {i['time']} minutes")
+		print(f"   ⭐ Importance : {i['smart_score']}%")
+		print("-" * 45)
+		
+	print()
+	save_data(data)
+
+current_session = None
+
+def start_session():
+	global current_session
+	
+	if current_session:
+		print("\n⚠️ A study session is already running.")
+		print("❌ Stop the current session before starting another.\n")
+		return
+	
+	data = load_data()
+	pending = []
+	
+	for i in data:
+		if not i["completed"]:
+			left_days = calculate_date(i["exam_date"])
+			
+			if left_days >= 0:
+				pending.append(i)
+	
+	if not pending:
+		print("\n📭 No pending study task found.\n")
+		return
+	
+	print("\n" + "=" * 40)
+	print("		⏱️ AVAILABLE STUDY SESSIONS")
+	print("=" * 40)
+	
+	for index, i in enumerate(pending, start=1):
+		try:
+			print(
+				f"\n{index}. 📚 {i['subject']} → {i['topic']}"
+				f"\n   ⏱️ Planned Time : {i['time']} min"
+			)
+		
+		except KeyError:
+			print(
+				"\n❌ Study time not found for this task."
+				"\n👉 First create Today's Smart Plan."
+			)
+			return
+	
+	print("\n" + "-" * 40)
+	
+	select = int_input(
+		"👉 Enter session number : "
+	)
+	
+	while True:
+		if 0 < select < len(pending) + 1:
+			
+			session = pending[select - 1]
+			
+			print("\n" + "=" * 40)
+			print("		▶️ STUDY SESSION STARTED")
+			print("=" * 40)
+			print(
+				f"📚 Subject : {session['subject']}"
+				f"\n📝 Topic   : {session['topic']}"
+				f"\n⏱️ Target  : {session['time']} min"
+			)
+			print("=" * 40)
+			
+			start_time = time.time()
+			planned_time = session["time"] * 60
+			
+			current_session = {
+				"id": session["id"],
+				"start_time": start_time,
+				"planned_time": planned_time
+			}
+			
+			break
+		
+		else:
+			select = int_input(
+				"❌ Invalid session number. Enter again : "
+			)
+	
+def view_current_session():
+
+	if current_session is None:
+		print("\n❌ No study session is currently running.\n")
+		return
+
+	data = load_data()
+	task = None
+
+	for i in data:
+		if i["id"] == current_session["id"]:
+			task = i
+			break
+
+	if task is None:
+		print("\n❌ Session task could not be found.\n")
+		return
+
+	elapsed = int(time.time() - current_session["start_time"])
+	remaining = max(0, current_session["planned_time"] - elapsed)
+
+	progress = min(
+		100,
+		int(elapsed / current_session["planned_time"] * 100)
+	)
+
+	print("\n" + "=" * 40)
+	print("	   ⏱️ CURRENT STUDY SESSION")
+	print("=" * 40)
+
+	print(f"📚 Subject	  : {task['subject']}")
+	print(f"📝 Topic		: {task['topic']}")
+	print(f"⏱️ Planned Time : {current_session['planned_time'] // 60} min")
+
+	print(
+		f"🕒 Elapsed	  : "
+		f"{elapsed // 60} min {elapsed % 60} sec"
+	)
+
+	print(
+		f"⏳ Remaining	: "
+		f"{remaining // 60} min {remaining % 60} sec"
+	)
+
+	print(f"📊 Progress	 : {progress}%")
+
+	if remaining == 0:
+		print("🟢 Status	   : Planned time completed")
+	else:
+		print("🟢 Status	   : Session Running")
+
+	print("=" * 40)
+	print()
+
+def stop_session():
+	global current_session
+
+	if current_session is None:
+		print("\n❌ No study session is running.\n")
+		return
+
+	data = load_data()	
+
+	for i in data:
+		if i["id"] == current_session["id"]:
+
+			elapsed = int(
+				(time.time() - current_session["start_time"]) / 60
+			)
+
+			i["actual_study_time"] = (
+				i.get("actual_study_time", 0) + elapsed
+			)
+
+			save_data(data)
+
+			print(
+				f"\n✅ Session stopped!"
+				f"\n📚 {i['subject']} → {i['topic']}"
+				f"\n⏱️ Session Time : {elapsed} min"
+				f"\n📋 Planned Time : "
+				f"{current_session['planned_time'] // 60} min"
+				f"\n📊 Total Study Time : "
+				f"{i['actual_study_time']} min"
+			)
+
+			if elapsed > current_session["planned_time"] // 60:
+				print("⚠️ You studied more than planned time!")
+
+			current_session = None
+			return
+
+	print("\n❌ Session task could not be found.\n")	
+
+def Progress_Tracker():
+	data = load_data()
+	
+	if not data:
+		print("\n📭 No task found.\n")
+		return
+	
+	total_task = len(data)
+	pending = 0
+	total_time = 0
+	actual_time = 0
+	
+	for i in data:
+		if not i["completed"]:
+			pending += 1
+			
+		actual_time += i.get("actual_study_time", 0)
+		total_time += i.get("time", 0)
+	
+	subjects_list = []
+	
+	for i in data:
+		task_subject = i["subject"].lower()[0:3]
+		
+		if not subjects_list:
+			subjects_list.append({task_subject: [i]})
+		
+		else:
+			found = False
+			
+			for subject in subjects_list:
+				if task_subject in subject:
+					found = True
+					subject[task_subject].append(i)
+					break
+			
+			if not found:
+				subjects_list.append({task_subject: [i]})
+	
+	print("\n" + "=" * 40)
+	print("		📊 PROGRESS TRACKER")
+	print("=" * 40)
+	
+	print(
+		f"\n📋 Total Tasks	 : {total_task}"
+		f"\n✅ Completed	   : {total_task - pending}"
+		f"\n⏳ Pending		 : {pending}"
+		f"\n📈 Completion Rate : "
+		f"{(total_task - pending) / total_task * 100:.1f}%"
+	)
+	
+	print("\n" + "-" * 40)
+	print("		⏱️ STUDY TIME")
+	print("-" * 40)
+	
+	print(
+		f"\n🎯 Planned Time	: {total_time} min"
+		f"\n📚 Actual Time	 : {actual_time} min"
+		f"\n⏰ Time Difference : {total_time - actual_time} min"
+	)
+	
+	print("\n" + "-" * 40)
+	print("		📚 SUBJECT-WISE PROGRESS")
+	print("-" * 40)
+	
+	for subject in subjects_list:		
+		for name, tasks in subject.items():
+			
+			completed = 0
+			
+			for i in tasks:
+				if i["completed"]:
+					completed += 1
+			
+			print(
+				f"\n📚 {name.upper():<10} : "
+				f"{completed}/{len(tasks)} completed "
+				f"→ {completed / len(tasks) * 100:.1f}%"
+			)
+	
+	print("\n" + "=" * 40)
+	
+#timer
+
+#	task = {
+#		"id": task_id,
+#		"subject": subject,
+#		"topic": topic,
+#		"exam_date": exam_date,
+#		"difficulty": difficulty,
+#		"completed": False,
+#		"created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def dashboard():
+
+	data = load_data()
+
+	if not data:
+		print("\n📭 No task found.\n")
+		return
+
+	today_task = []
+	pending = []
+	planned_time = 0
+	actual_study_time = 0
+
+	for i in data:
+
+		try:
+			if i["plan_date"] == str(date.today()):
+				today_task.append(i)
+				
+		except KeyError:		
+			print("\n👉 First create Today's Smart Plan.")
+			return 
+			
+	if not today_task:
+		print("\n" + "=" * 40)
+		print("	   📈 TODAY'S STUDENT DASHBOARD")
+		print("=" * 40)
+		print("\n📭 No Smart Plan found for today.")
+		print("👉 First create Today's Smart Plan.\n")
+		print("=" * 40)
+		return
+
+	for i in today_task:
+
+		if not i["completed"]:
+			pending.append(i)
+
+		planned_time += i.get("time", 0)
+		actual_study_time += i.get("actual_study_time", 0)
+
+	print("\n" + "=" * 40)
+	print("	   📈 TODAY'S STUDENT DASHBOARD")
+	print("=" * 40)
+
+	print(
+		f"\n📅 Date			  : {date.today()}"
+		f"\n📋 Today's Tasks	 : {len(today_task)}"
+		f"\n⏳ Pending Tasks	 : {len(pending)}"
+		f"\n✅ Completed Tasks   : "
+		f"{len(today_task) - len(pending)}"
+		f"\n📊 Completion Rate   : "
+		f"{(len(today_task) - len(pending)) / len(today_task) * 100:.1f}%"
+	)
+
+	print("\n" + "-" * 40)
+	print("		   ⏱️ STUDY TIME")
+	print("-" * 40)
+
+	print(
+		f"\n🧠 Planned Study	 : {planned_time} min"
+		f"\n📚 Actual Study	  : {actual_study_time} min"
+		f"\n⏰ Study Difference  : "
+		f"{planned_time - actual_study_time} min"
+	)
+
+	print("\n" + "-" * 40)
+	print("		   🎯 NEXT STUDY")
+	print("-" * 40)
+
+	if not pending:
+
+		print("\n🎉 All today's tasks are completed!")
+		print("🔥 Great work! Keep it up!")
+
+	else:
+
+		print(
+			f"\n🎯 Next Topic		: "
+			f"{pending[0]['topic']}"
+			f"\n📚 Subject		   : "
+			f"{pending[0]['subject']}"
+		)
+
+	print("\n" + "-" * 40)
+	print("		   ⏱️ CURRENT SESSION")
+	print("-" * 40)
+
+	print(
+		f"\n⏱️ Current Session   : "
+		f"{'Running' if current_session else 'Not Running'}"
+	)
+
+	print("\n" + "=" * 40)
+	print()
+	
+	
+def weather():
+	while True:
+		place = input("\n🌦️ Enter place name or 'exit' : ").strip()
+
+		if place.lower() == "exit":
+			return
+
+		print("\n🔎 Fetching weather information...")
+
+		place_detail_url = (
+			f"https://geocoding-api.open-meteo.com/v1/search?name={place}"
+		)
+
+		try:
+			request1 = requests.get(
+				place_detail_url,
+				timeout=10
+			)
+			data1 = request1.json()
+
+			try:
+				if data1["results"][0]["feature_code"].startswith("P"):
+
+					latitude = data1["results"][0]["latitude"]
+					longitude = data1["results"][0]["longitude"]
+
+					temp_url = (
+						f"https://api.open-meteo.com/v1/forecast?"
+						f"latitude={latitude}&longitude={longitude}"
+						f"&current=temperature_2m,"
+						f"relative_humidity_2m,"
+						f"wind_speed_10m,weather_code"
+						f"&timezone=auto"
+					)
+
+					request2 = requests.get(
+						temp_url,
+						timeout=10
+					)
+					data2 = request2.json()
+
+					current_info = data2["current"]
+					units = data2["current_units"]
+
+					weather_list = [
+						"temperature_2m",
+						"relative_humidity_2m",
+						"wind_speed_10m"
+					]
+
+					temprature = (
+						str(current_info[weather_list[0]])
+						+ units[weather_list[0]]
+					)
+
+					humidity = (
+						str(current_info[weather_list[1]])
+						+ units[weather_list[1]]
+					)
+
+					wind_speed = (
+						str(current_info[weather_list[2]])
+						+ units[weather_list[2]]
+					)
+
+					weather = {
+						0: "Clear Sky",
+						1: "Mainly Clear",
+						2: "Partly Cloudy",
+						3: "Overcast",
+						45: "Fog",
+						51: "Drizzle",
+						61: "Rain",
+						71: "Snow",
+						80: "Rain Showers",
+						95: "Thunderstorm"
+					}
+
+					weather_of_place = weather.get(current_info["weather_code"] , "Unknown")
+						
+					country = data1["results"][0]["country"]
+
+					print("\n" + "=" * 40)
+					print("           🌦️ WEATHER INFORMATION")
+					print("=" * 40)
+
+					print(
+						f"\n📍 Place       : {place}"
+						f"\n🌍 Country     : {country}"
+						f"\n🌡️ Temperature : {temprature}"
+						f"\n💧 Humidity    : {humidity}"
+						f"\n💨 Wind Speed  : {wind_speed}"
+						f"\n☁️ Weather     : {weather_of_place}"
+					)
+
+					print("\n" + "=" * 40)
+				else:
+					print("\n❌ Place not found.\n")
+			except (KeyError, IndexError):
+				print("\n❌ Place not found.\n")
+
+		except requests.exceptions.RequestException:
+			print("\n🌐 Network error."
+				"\n👉 Please check your internet connection.\n")
+
+async def web_data(topic):
+	try:
+		url1 = f"https://en.wikipedia.org/api/rest_v1/page/summary/{topic}"
+		
+		headers1 = {
+			"User-Agent": "SmartResearchManager/1.0"
+		}
+		r1 = requests.get(url1,  headers=headers1)
+		data1 = r1.json()
+		title = data1["title"] #= title cricket
+		small_url = data1["content_urls"]["desktop"]["page"] #small url source
+		description = data1["extract"] #-> description
+		
+		data = {"TITLE " : title , "URL" : small_url , "Extract" : description}
+		
+		#data_list[0] = data
+		return data
+	
+	except Exception as e:
+		return(f"Title : Error \n  Url : N/A \n Extract : Network Issue : {str(e)}")
+
+async def duck(topic):
+	try:
+		sub_data_list =[]
+		url = f"https://html.duckduckgo.com/html/?q={quote(topic)}"
+		r = requests.get(
+		url,
+			headers={"User-Agent": "Mozilla/5.0"}
+		)
+		
+		soup = BeautifulSoup(r.text, "html.parser")
+		
+		for result in soup.select(".result"):
+			title = result.select_one(".result__title")
+			link = result.select_one(".result__url")
+			snippet = result.select_one(".result__snippet")
+			data ={"TITLE" : title.get_text(" ", strip=True) if title else "N/A" , "URL" : link.get_text(" ", strip=True) if link else "N/A" , "SNIPPET": snippet.get_text(" ", strip=True) if snippet else "N/A"}
+			sub_data_list.append(data)
+			
+			if len(sub_data_list) == 3:
+				break
+		
+		return sub_data_list
+	
+	except Exception as e:
+		return(f"Title : Error \n  Url : N/A \n Extract : Network Issue : {str(e)}")
+
+  	
+async def main(topic):
+	tasks = []
+	tasks.append(web_data(topic))
+	tasks.append(duck(topic))
+	data = asyncio.gather(*tasks)
+	return await data
+	
+def research(topic_name):
+
+	print("\n" + "=" * 45)
+	print("			 🔎 RESEARCH ASSISTANT")
+	print("=" * 45)
+	print(f"\n🔍 Searching for : {topic_name}")
+	print("⏳ Please wait...\n")
+
+	return_data = asyncio.run(main(topic_name))
+
+	for i in return_data:
+
+		if isinstance(i, dict) and i:
+
+			print("\n" + "-" * 45)
+			print("				📖 WIKIPEDIA")
+			print("-" * 45)
+
+			print(f"\n📌 Title   : {i.get('TITLE', 'N/A')}")
+			print(f"🔗 Source  : {i.get('URL', 'N/A')}")
+			print(f"\n📝 Summary :\n{i.get('Extract', 'N/A')}")
+
+		elif isinstance(i, list) and i:
+
+			print("\n" + "-" * 45)
+			print("			  🌐 WEB RESULTS")
+			print("-" * 45)
+
+			for index, element in enumerate(i, start=1):
+
+				print(
+					f"\n🔹 Result {index}"
+					f"\n📌 Title   : {element.get('TITLE', 'N/A')}"
+					f"\n🔗 URL	 : {element.get('URL', 'N/A')}"
+					f"\n📝 Snippet : {element.get('SNIPPET', 'N/A')}"
+				)
+
+				print("-" * 45)
+
+		else:
+			print(f"\n❌ {i}")
+
+	print("\n" + "=" * 45)
+
+def digital_dict():
+	while True:
+
+		word = input(
+			"\n📖 Enter word or 'exit' : "
+		).strip().lower()
+
+		if word == "exit":
+			return
+
+		if not word:
+			print("\n❌ Please enter a valid word.")
+			continue
+
+		spell = SpellChecker()
+		word = spell.correction(word)
+
+		print(f"\n🔎 Searching meaning for : {word}")
+
+		url = (
+			f"https://api.dictionaryapi.dev/api/v2/"
+			f"entries/en/{word}"
+		)
+
+		try:
+			r = requests.get(url, timeout=15)
+			if r.status_code == 200:
+				data = r.json()
+
+				if data and isinstance(data, list):
+					meanings = data[0].get("meanings", [])
+					if meanings:
+						definitions = meanings[0].get("definitions", [])
+						if definitions:
+
+							print("\n" + "=" * 40)
+							print("			 📖 DIGITAL DICTIONARY")
+							print("=" * 40)
+
+							print(f"\n🔤 Word	   : {word}")
+							print(
+								f"📚 Meaning	: "
+								f"{definitions[0].get('definition')}"
+							)
+
+							print("\n" + "=" * 40)
+
+						else:
+							print(
+								"\n❌ No definition found "
+								"for this word."
+							)
+
+					else:
+						print("\n❌ No meaning found for this word.")
+
+				else:
+					print("\n❌ Unexpected data received from server.")
+
+			elif r.status_code == 404:
+
+				print(
+					f"\n❌ The word '{word}' "
+					"was not found in the dictionary."
+				)
+
+			else:
+				print(
+					f"\n⚠️ Server error. "
+					f"Status code: {r.status_code}"
+				)
+		except requests.exceptions.ConnectionError:
+			print(
+				"\n🌐 Network Error."
+				"\n👉 Please check your internet connection."
+			)
+
+		except requests.exceptions.Timeout:
+
+			print(
+				"\n⏳ Request timed out."
+				"\n👉 Please try again later."
+			)
+
+		except requests.exceptions.RequestException as e:
+
+			print(f"\n❌ Network error: {e}")
+
+		except Exception as e:
+
+			print(f"\n❌ Unexpected error: {e}")
+			
+def food_nutrients():
+	while True:
+
+		food = input(
+			"\n🥗 Enter food name or 'exit' : "
+		).strip()
+
+		if food.lower() == "exit":
+			return
+
+		if not food:
+			print("\n❌ Please enter a food name.")
+			continue
+
+		print("\n🔎 Searching nutrition information...")
+
+		url = (
+			f"https://api.nal.usda.gov/fdc/v1/foods/search?"
+			f"api_key=DEMO_KEY&query={food}"
+		)
+
+		try:
+			r = requests.get(url, timeout=15)
+			data = r.json()
+
+			if "foods" in data and len(data["foods"]) > 0:
+
+				print("\n" + "=" * 45)
+				print("			 🥗 STUDENT NUTRITION")
+				print("=" * 45)
+
+				print(f"\n🍽️ Food : {food}")
+				print("-" * 45)
+				print("		📊 NUTRITION PER 100 GRAMS")
+				print("-" * 45)
+
+				nutrient_data = data["foods"][0]["foodNutrients"]
+
+				for i in nutrient_data:
+
+					name = i.get("nutrientName")
+					value = i.get("value")
+					unit = i.get("unitName")
+
+					print(
+						f"🔹 {name:<35} : "
+						f"{value} {unit}"
+					)
+					print("\n" + "=" * 45)
+			else:
+				print(
+					f"\n❌ Food '{food}' "
+					"was not found."
+				)
+		except requests.exceptions.RequestException:
+
+			print(
+				"\n🌐 Network error."
+				"\n👉 Please check your internet connection."
+			)
+		except Exception as e:
+			print(f"\n❌ Unexpected error: {e}")
+				
+#----------------&--------------------&-----------------&---	
+#starting Menu Main
+
+
+
+main_menu = """
+╔════════════════════════════════════╗
+║	   🧠 SMART STUDENT SYSTEM	  ║
+╠════════════════════════════════════╣
+║  1. 📋 Show Main Menu Again		║
+║  2. 🧠 Smart Study Planner		 ║
+║  3. ⏱️  Focus Study Timer		   ║
+║  4. 📊 Progress Tracker			 ║
+║  5. 🔎 Research Assistant		   ║
+║  6. 📖 Digital Dictionary		   ║
+║  7. 🥗 Student Nutrition			║
+║  8. 🌦️  Weather Information		 ║
+║  9. 📈 Student Dashboard		║
+║  0. 🚪 Exit						 ║
+╚════════════════════════════════════╝
+"""
+print(main_menu)
+
+while True:
+	choice = int_input("Enter num according to menu : ")
+	
+	if not 0 <= choice < 10:
+		print("Enter number according to menu ")
+		
+	if choice == 0:
+		break
+		
+	elif choice == 1:
+		print(main_menu)
+		
+	elif choice == 2:
+		study_planner_menu = """
+		╔════════════════════════════════════╗
+		║		   📚 STUDY PLANNER		 ║
+		╠════════════════════════════════════╣
+		║  1. 📋 See Sub Menu				║
+		║  2. ➕ Add Study Task			   ║
+		║  3. 👀 View All Tasks			  ║
+		║  4. 🧠 Today's Smart Plan		  ║
+		║  5. ✅ Mark Task Completed		 ║
+		║  6. 🔙 Back						 ║
+		╚════════════════════════════════════╝
+		"""
+		
+		
+		print("\n" + "=" * 38)
+		print("		  📚 SMART STUDY PLANNER")
+		print("=" * 38)
+		print(study_planner_menu)
+		
+		while True:
+		
+			study_planner_choice = int_input(
+				"👉 Enter number according to sub menu : "
+			)
+		
+			if study_planner_choice == 1:
+				print("\n" + study_planner_menu)
+		
+			elif study_planner_choice == 2:
+				taking_inputs()
+		
+			elif study_planner_choice == 3:
+				view_all_tasks()
+		
+			elif study_planner_choice == 4:
+				smart_study()
+		
+			elif study_planner_choice == 5:
+		
+				mark_completed()
+		
+			elif study_planner_choice == 6:
+				print("\n👋 Returning back...\n")
+				break
+		
+			else:
+				print(
+					"\n❌ Enter a number according to the "
+					"sub menu only.\n"
+				)
+				
+	elif choice == 3:
+		time_menu = """
+			╔════════════════════════════════════╗
+			║	   ⏱️ FOCUS STUDY TIMER		║
+			╠════════════════════════════════════╣
+			║  1. 📋 See Sub Menu			   ║
+			║  2. ▶️ Start Study Session		║
+			║  3. 👀 View Current Session	   ║
+			║  4. 🛑 Stop Study Session		 ║
+			║  5. 🔙 Back					   ║
+			╚════════════════════════════════════╝
+		"""
+		print(time_menu)
+		while True:
+			time_choice = int_input("Enter number according to time menu : ")
+			
+			if  not 0 < time_choice < 6:
+				print("Enter number according to time menu")
+			
+			if time_choice == 1:
+				print(time_menu)
+				
+			elif time_choice == 2:
+				start_session()
+				
+			elif time_choice == 3:
+				view_current_session()
+				
+			elif time_choice == 4:
+				stop_session()
+				
+			else :
+				break
+				
+	elif choice == 4:
+		Progress_Tracker()	
+	
+	elif choice == 5:
+		topic_name = input("Enter the topic name : ")
+		research(topic_name)
+	
+	elif choice == 6:
+		digital_dict()
+	
+	elif choice == 7 :
+		food_nutrients()
+		
+	elif choice == 8:
+		weather()
+			
+	elif choice == 9:
+		dashboard()	
