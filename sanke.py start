@@ -1,0 +1,42 @@
+import pygame
+
+pygame.init()
+
+screen = pygame.display.set_mode((600, 600))
+
+BLACK = (0, 0 ,0)
+running = True
+
+def draw_game(board):
+	for index , i in enumerate(board):
+		for cell_index , j in enumerate(i):
+			if j is not None:
+					
+				if j.lower() == "s":
+					pygame.draw.rect(screen , (0 ,255 , 0) , (cell_index * 40 , index *40 , 40 , 40))	
+					
+				elif j.lower() == "f":
+					pygame.draw.rect(screen , (255 , 0 ,0) , (cell_index * 40 , index *40 , 40 , 40))	
+				pygame.display.flip()
+	
+	
+board = [[None for _ in range(15)] for _ in range(15)]
+
+# Connected snake body
+board[10][5] = "s"
+board[10][6] = "s"
+board[10][7] = "s"
+board[10][8] = "s"
+board[10][9] = "s"
+board[10][10] = "s"
+board[10][11] = "s"
+board[10][12] = "s"
+board[11][12] = "s"
+board[11][13] = "s"
+# Food
+board[14][14] = "f"
+draw_game(board)
+	
+#while running:
+#	screen.fill(BLACK)	
+#	pygame.display.flip()
