@@ -1,0 +1,71 @@
+def move_snake(board , direction = "right"):
+	
+	nxt = copy.deepcopy(board)
+	growth = False
+	
+	for row , i in enumerate(board):
+		for col , j in enumerate(i):		
+		
+			if j is not None:			
+				if board[row][col].lower() == "sh":
+					if direction.lower().startswith("l"): # left
+						if nxt[row][col -1] is not None and nxt[row][col -1].lower() == "f":
+							nxt[row] [col -1] = "s"
+							nxt[row] [col -2] = "sh"
+							growth = True
+							
+						else:	
+							nxt[row] [col -1] = "SH"			
+					elif direction.lower().startswith("t"): # top
+						if nxt[row - 1] [col] is not None and nxt[row - 1] [col].lower() == "f":
+							nxt[row -1][col] = "s"
+							nxt[row -2][col] = "sh"
+							growth = True
+							
+						else:	
+							nxt[row -1][col] = "SH"									 
+					elif direction.lower().startswith("b"): # bottom
+					
+						if nxt[row +1] [col] is not None and nxt[row +1] [col].lower() == "f":
+							nxt[row +1][col] = "s"
+							nxt[row + 2][col] = "sh"
+							growth = True					
+							
+						else:	
+							nxt[row +1][col] = "SH"									 
+					else: #right							
+						if nxt[row] [col +1] is not None and nxt[row] [col +1].lower() == "f":
+							nxt[row][col+1] = "s"
+							nxt[row] [col +2] = "sh"
+							growth = True
+					
+						else:	
+							nxt[row] [col +1] = "SH"
+					nxt[row][col] = "S"
+					
+								 	
+				elif board[row][col].lower() == "st":
+					if  board[row +1][col] is not None and board[row +1][col].lower() == "s":
+						nxt[row +1][col] = "st"
+						
+					elif  board[row - 1][col] is not None and board[row - 1 ][col].lower() == "s":
+						
+						nxt[row -1][col] = "st"
+						
+					elif  board[row][col - 1] is not None and board[row] [col -1].lower() == "s":
+						nxt[row][col -1] = "st"
+						
+					elif  board[row][col + 1] is not None and board[row] [col +1].lower() == "s":					
+						nxt[row] [col +1] = "st"		
+					nxt[row][col] = None
+					
+	
+	if growth:
+		while True:
+			r = random.randint(0 , 14)
+			cl = random.randint(0,14)
+							
+			if nxt[r][cl] is None:	
+				nxt[r][cl] = "f"
+				break			
+	return nxt
